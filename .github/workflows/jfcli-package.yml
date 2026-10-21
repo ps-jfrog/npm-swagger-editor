@@ -68,7 +68,7 @@ jobs:
 
       - name: "Config jf with repos"
         run: |
-          jf npmc --server-id-resolve="${{ env.JF_CLI_SERVER_ID }}" --server-id-deploy="${{ env.JF_CLI_SERVER_ID }}"  --repo-resolve="${{ env.RT_REPO_NPM_VIRTUAL }}" --repo-deploy="${{ env.RT_REPO_NPM_VIRTUAL }}"
+          jf npmc --repo-resolve "${{ env.RT_REPO_NPM_VIRTUAL }}" --repo-deploy "${{ env.RT_REPO_NPM_VIRTUAL }}"
 
       - name: "Install dependencies and build app"
         run: |
