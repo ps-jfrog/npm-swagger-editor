@@ -72,10 +72,9 @@ jobs:
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
-          set -euo pipefail
           jf npm install
           # # Run the build script using local node_modules binaries
-          jf npm run build
+          npm run build
           
           # # Verify build output directory
           # test -d build || test -d dist
