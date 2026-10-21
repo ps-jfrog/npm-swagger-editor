@@ -60,7 +60,6 @@ jobs:
 
       - name: "Create ENV variables"
         run: |
-          set -euo pipefail
           echo "SHORT_COMMIT_CODE=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
           echo "TODAYS_DATE=$(date +'%Y-%m-%d')" >> "$GITHUB_ENV"
           rm -f package-lock.json .npmrc
@@ -76,7 +75,7 @@ jobs:
           set -euo pipefail
           jf npm install
           # # Run the build script using local node_modules binaries
-          # jf npm run build:app
+          jf npm run build
           
           # # Verify build output directory
           # test -d build || test -d dist
@@ -100,15 +99,15 @@ jobs:
 
       - name: "Set Docker tags"
         run: |
-          set -euo pipefail
           echo "tag_build=${{env.JF_REGISTRY}}/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:${{env.BUILD_ID}}" >> "$GITHUB_ENV"
           echo "tag_date=${{env.JF_REGISTRY}}/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:${{env.TODAYS_DATE}}" >> "$GITHUB_ENV"
           echo "tag_sha=${{env.JF_REGISTRY}}/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:${{env.SHORT_COMMIT_CODE}}" >> "$GITHUB_ENV"
           echo "tag_latest=${{env.JF_REGISTRY}}/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:latest" >> "$GITHUB_ENV"
+          pwd
+          tree . 
 
       - name: "Package: Docker build and push"
         run: |
-          set -euo pipefail
           docker buildx build -f "${{env.DOCKER_FILE}}" --platform "${{env.DOCKER_BUILDX_PLATFORMS}}" --metadata-file "${{env.DOCKER_METADATA_JSON}}" --push -t "${{env.tag_sha}}" -t "${{env.tag_date}}" -t "${{env.tag_build}}" -t "${{env.tag_latest}}" .
 
           image_digest="$(jq -er '.["containerimage.digest"]' "${DOCKER_METADATA_JSON}")"
@@ -124,7 +123,6 @@ jobs:
 
       - name: "BuildInfo"
         run: |
-          set -euo pipefail
           test -s "${{env.DOCKER_IMAGE_FILE}}"
           grep -Eq '^[^[:space:]]+@sha256:[0-9a-f]{64}$' "${{env.DOCKER_IMAGE_FILE}}"
 
@@ -134,12 +132,6 @@ jobs:
 
       - name: "AppTrust: create application version"
         run: |
-          set -euo pipefail
-          jq -n \
-            --arg name "${{env.BUILD_NAME}}" \
-            --arg number "${{env.BUILD_ID}}" \
-            --arg repo "${{env.PROJECT_KEY}}-build-info" \
-            '{builds: [{name: $name, number: $number, repository_key: $repo, include_dependencies: false}]}' \
-            > "${{env.APP_SPEC_JSON}}"
+          jq -n --arg name "${{env.BUILD_NAME}}" --arg number "${{env.BUILD_ID}}" --arg repo "${{env.PROJECT_KEY}}-build-info" '{builds: [{name: $name, number: $number, repository_key: $repo, include_dependencies: false}]}' > "${{env.APP_SPEC_JSON}}"
           cat "${{env.APP_SPEC_JSON}}"
           jf apptrust version-create "${{env.APPLICATION_KEY}}" "${{env.APPLICATION_VERSION}}" --spec="${{env.APP_SPEC_JSON}}"
