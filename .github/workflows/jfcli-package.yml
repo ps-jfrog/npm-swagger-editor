@@ -72,12 +72,21 @@ jobs:
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
-          jf npm install
-          # # Run the build script using local node_modules binaries
+          export JFROG_RUN_NATIVE=true
+          export JFROG_CLI_GHOST_FROG=true
+          export JFROG_CLI_BUILD_NAME="${{env.BUILD_NAME}}"
+          export JFROG_CLI_BUILD_NUMBER="${{env.BUILD_ID}}"
+
+          jf package-alias install --packages=npm
+          NPM_REG_HOST="//${{env.JF_REGISTRY}}/artifactory/api/npm/${{env.RT_REPO_NPM_VIRTUAL}}/"
+          NPM_REGISTRY="${{env.JF_RT_URL}}/artifactory/api/npm/${{env.RT_REPO_NPM_VIRTUAL}}/"
+          npm config set registry "${NPM_REGISTRY}"
+          npm config set "${NPM_REG_HOST}:_authToken" "${PSAZUSE_JF_ACCESS_TOKEN}"
+          export PATH="$HOME/.jfrog/package-alias/bin:$PATH"
+          jf package-alias status
+
+          npm install
           npm run build
-          
-          # # Verify build output directory
-          # test -d build || test -d dist
 
       - name: "Docker authentication"
         uses: docker/login-action@v4
