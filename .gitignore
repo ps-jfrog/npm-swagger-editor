@@ -39,3 +39,12 @@ playwright-report/
 
 /swagger-api-swagger-editor*.tgz
 .jfrog/projects/npm.yaml
+
+# jfcli docker build-publish outputs
+/build-metadata.json
+/jfcli-app-spec.json
+/jfcli-app-spec-docker.json
+/docker-image.txt
+.jfrog/ 
+/package-lock.json
+/.npmrc

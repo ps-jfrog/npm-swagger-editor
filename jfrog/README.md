@@ -30,7 +30,29 @@
 FROM psazuse.jfrog.io/npmapptrust-docker-virtual/nginx:1.31.6-alpine
 ```
 
-## Dev command
+## Dev sandbox
+### npm command
+- build command
 ```
 ./jfrog/jfcli.sh
 ```
+
+- output
+![Dev sandbox - npm output](./images/cli-npm-ouput.png)
+
+- RT builds
+![Artifactory - builds](./images/builds-npm.png)
+
+<!-- ### Docker command
+- build command
+```
+./jfrog/jfcli.sh dkr
+```
+
+- output
+![Dev sandbox - docker output](./images/cli-docker-ouput.png) 
+
+- RT builds
+![Artifactory - builds](./images/builds-docker.png)
+-->
+

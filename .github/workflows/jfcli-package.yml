@@ -1,4 +1,4 @@
-name: "Package"
+name: "AppTrust: Package"
 on: push
 permissions:
   actions: read # for detecting the Github Actions environment.
@@ -61,17 +61,22 @@ jobs:
 
       - name: "Clean lock files"
         run: |
-          rm -rf package-lock.json
+          rm -rf package-lock.json .npmrc
 
       - name: "Config jf with repos"
         run: |
           jf npmc --global --repo-resolve ${{ env.RT_REPO_NPM_VIRTUAL}} --repo-deploy ${{ env.RT_REPO_NPM_VIRTUAL}} 
-          jf npm cache clean --force
+          # jf npm cache clean --force
 
       - name: "Create ENV variables"
         run: |
           echo "SHORT_COMMIT_CODE=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "TODAYS_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+
+      - name: Install dependencies and build
+        run: |
+          jf npm install
+          jf npm run build
 
       - name: "Docker authentication"  # ref https://github.com/marketplace/actions/docker-login
         id: config-docker
