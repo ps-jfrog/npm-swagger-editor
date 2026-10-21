@@ -38,3 +38,4 @@ playwright-report/
 .idea
 
 /swagger-api-swagger-editor*.tgz
+.jfrog/projects/npm.yaml

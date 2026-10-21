@@ -1,0 +1,21 @@
+#FROM nginx:1.31.6-alpine
+# https://hub.docker.com/_/nginx/
+FROM psazuse.jfrog.io/npmapptrust-docker-virtual/nginx:1.31.6-alpine
+
+
+LABEL maintainer="vladimir.gorej@smartbear.com" \
+      org.opencontainers.image.authors="vladimir.gorej@smartbear.com" \
+      org.opencontainers.image.url="https://editor.swagger.io" \
+      org.opencontainers.image.source="https://github.com/swagger-api/swagger-editor/tree/main" \
+      org.opencontainers.image.description="SwaggerEditor@5 Docker image"  \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+
+RUN apk add --update-cache --no-cache "libxml2>=2.13.9-r0"
+
+COPY ./build /usr/share/nginx/html
+
+EXPOSE 8080
+
+# start nginx
+CMD ["nginx", "-g", "daemon off;"]
