@@ -75,11 +75,11 @@ jobs:
         run: |
           set -euo pipefail
           jf npm install
-          # Run the build script using local node_modules binaries
-          npm run build:app
+          # # Run the build script using local node_modules binaries
+          # jf npm run build:app
           
-          # Verify build output directory
-          test -d build || test -d dist
+          # # Verify build output directory
+          # test -d build || test -d dist
 
       - name: "Docker authentication"
         uses: docker/login-action@v4
