@@ -100,7 +100,7 @@ jobs:
           echo "tag_build=${{env.JF_REGISTRY}}/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:${{env.BUILD_ID}}" >> "$GITHUB_ENV"
           echo "tag_date=${{env.JF_REGISTRY}}/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:${{env.TODAYS_DATE}}" >> "$GITHUB_ENV"
           echo "tag_sha=${{env.JF_REGISTRY}}/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:${{env.SHORT_COMMIT_CODE}}" >> "$GITHUB_ENV"
-          echo "tag_latest="${{env.JF_REGISTRY}}/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:latest" >> "$GITHUB_ENV"
+          echo "tag_latest=${{env.JF_REGISTRY}}/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:latest" >> "$GITHUB_ENV"
 
       - name: "Package: Docker build and push"
         run: |
@@ -116,25 +116,17 @@ jobs:
               ;;
           esac
           # jf rt bdc accepts one line: <image-tag>@sha256:<manifest-digest>
-          printf '%s@%s\n' "${tag_build}" "${image_digest}" | tee "${DOCKER_IMAGE_FILE}"
+          printf '%s@%s\n' "${tag_build}" "${image_digest}" | tee "${{env.DOCKER_IMAGE_FILE}}"
 
       - name: "BuildInfo"
         run: |
           set -euo pipefail
-          test -s "${DOCKER_IMAGE_FILE}"
-          grep -Eq '^[^[:space:]]+@sha256:[0-9a-f]{64}$' "${DOCKER_IMAGE_FILE}"
+          test -s "${{env.DOCKER_IMAGE_FILE}}"
+          grep -Eq '^[^[:space:]]+@sha256:[0-9a-f]{64}$' "${{env.DOCKER_IMAGE_FILE}}"
 
-          jf rt bdc "${{env.RT_REPO_DOCKER_VIRTUAL}}" \
-            --image-file="${DOCKER_IMAGE_FILE}" \
-            --build-name="${{env.BUILD_NAME}}" \
-            --build-number="${{env.BUILD_ID}}" \
-            --project="${{env.PROJECT_KEY}}"
+          jf rt bdc "${{env.RT_REPO_DOCKER_VIRTUAL}}" --image-file="${{env.DOCKER_IMAGE_FILE}}" --build-name="${{env.BUILD_NAME}}" --build-number="${{env.BUILD_ID}}" --project="${{env.PROJECT_KEY}}"
 
-          jf rt bp "${{env.BUILD_NAME}}" "${{env.BUILD_ID}}" \
-            --collect-git-info=true \
-            --collect-env=true \
-            --project="${{env.PROJECT_KEY}}" \
-            --detailed-summary=true
+          jf rt bp "${{env.BUILD_NAME}}" "${{env.BUILD_ID}}" --collect-git-info=true --collect-env=true --project="${{env.PROJECT_KEY}}" --detailed-summary=true
 
       - name: "AppTrust: create application version"
         run: |
@@ -145,5 +137,5 @@ jobs:
             --arg repo "${{env.PROJECT_KEY}}-build-info" \
             '{builds: [{name: $name, number: $number, repository_key: $repo, include_dependencies: false}]}' \
             > "${{env.APP_SPEC_JSON}}"
-          cat "${APP_SPEC_JSON}"
+          cat "${{env.APP_SPEC_JSON}}"
           jf apptrust version-create "${{env.APPLICATION_KEY}}" "${{env.APPLICATION_VERSION}}" --spec="${{env.APP_SPEC_JSON}}"
