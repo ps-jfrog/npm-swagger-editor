@@ -1,6 +1,6 @@
 #!/bin/bash
 clear
-buildType=${1:-"DKR"} # ${1:-"NPM"}
+buildType=${1:-"NPM"} # ${1:-"DKR"} 
 
 export JF_NAME="psazuse" JF_EDGE_NAME="psazeuwedge" JFROG_CLI_LOG_LEVEL="DEBUG" 
 export JF_RT_URL="https://${JF_NAME}.jfrog.io" 
@@ -104,6 +104,7 @@ docker-package(){
 
     # Build Publish. bdc records the image already pushed by buildx; bp publishes that build-info.
     jf rt bdc "${RT_REPO_DOCKER_VIRTUAL}" --image-file "${DOCKER_IMAGE_FILE}" --build-name="${BUILD_NAME}" --build-number="${BUILD_ID}" --project="${PROJECT_KEY}"
+    
     jf rt bp "${BUILD_NAME}" "${BUILD_ID}" --collect-git-info=true --collect-env=true --project="${PROJECT_KEY}" --detailed-summary
 
     # AppTrust

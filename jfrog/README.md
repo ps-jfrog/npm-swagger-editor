@@ -34,7 +34,7 @@ FROM psazuse.jfrog.io/npmapptrust-docker-virtual/nginx:1.31.6-alpine
 ### npm command
 - build command
 ```
-./jfrog/jfcli.sh
+./jfrog/jfcli.sh npm
 ```
 
 - output
@@ -43,7 +43,7 @@ FROM psazuse.jfrog.io/npmapptrust-docker-virtual/nginx:1.31.6-alpine
 - RT builds
 ![Artifactory - builds](./images/builds-npm.png)
 
-<!-- ### Docker command
+### Docker command
 - build command
 ```
 ./jfrog/jfcli.sh dkr
@@ -54,5 +54,4 @@ FROM psazuse.jfrog.io/npmapptrust-docker-virtual/nginx:1.31.6-alpine
 
 - RT builds
 ![Artifactory - builds](./images/builds-docker.png)
--->
 

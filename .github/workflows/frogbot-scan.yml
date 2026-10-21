@@ -1,0 +1,30 @@
+name: "Frogbot Scan"
+on: push
+permissions:
+  contents: read
+  security-events: write
+  # [Mandatory if using OIDC authentication protocol instead of JF_ACCESS_TOKEN]
+  id-token: write
+env:
+  JF_RT_URL: "https://${{vars.JF_NAME}}.jfrog.io"
+  PROJECT_KEY: "npmapptrust"
+  # refer: https://docs.jfrog.com/security/docs/how-to-commit-scan-and-pr-scan
+jobs:
+  scan-repository:
+    runs-on: ubuntu-latest
+    environment: frogbot
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+
+      - uses: jfrog/frogbot@v3  # ref: https://github.com/jfrog/frogbot
+        env:
+          JF_URL: "${{env.JF_RT_URL}}"
+          JF_PROJECT: "${{env.PROJECT_KEY}}"
+          JFROG_CLI_LOG_LEVEL: "DEBUG"
+        #   JF_GIT_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          ACTIONS_ALLOW_UNSECURE_NODE_VERSION: true  # Allow secure Node fallback
+        with:
+            version: latest #2.71.0
+            oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER_NAME }}

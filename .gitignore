@@ -47,4 +47,7 @@ playwright-report/
 /docker-image.txt
 .jfrog/ 
 /package-lock.json
+package-lock.json
+*-lock.json
+.npmrc
 /.npmrc

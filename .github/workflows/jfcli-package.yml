@@ -1,161 +1,149 @@
 name: "AppTrust: Package"
 on: push
+
 permissions:
-  actions: read # for detecting the Github Actions environment.
-  id-token: write # for creating OIDC tokens for signing.
-  packages: write # for uploading attestations.
+  actions: read
+  id-token: write # OIDC token for JFrog CLI and Docker login
   contents: read
-  security-events: write # Required for uploading code scanning.
+  packages: write
+  security-events: write
   attestations: write
   artifact-metadata: write
   issues: write
-env:
-  JF_REGISTRY: "${{vars.JF_NAME}}.jfrog.io"
-  JF_RT_URL: "https://${{vars.JF_NAME}}.jfrog.io"
-  PROJECT_KEY: "npmapptrust"
-  APPLICATION_KEY: "swaggerapp" 
-  RT_REPO_NPM_VIRTUAL: "npmapptrust-virtual" 
-  RT_REPO_DOCKER_VIRTUAL: "npmapptrust-docker-virtual" 
-  BUILD_ID: "${{github.run_number}}"
-  JOB_SUMMARY: false
-  CLI_LOG_LEVEL: DEBUG # DEBUG, INFO, WARN, ERROR
-  JAVA_DISTRIBUTION: 'temurin'
-  JAVA_VERSION: '25'
-  #RBV2_SIGNING_KEY: "${{secrets.RBV2_SIGNING_KEY}}" # ref https://jfrog.com/help/r/jfrog-artifactory-documentation/create-signing-keys-for-release-bundles-v2
-  DEFAULT_WORKSPACE: "${{github.workspace}}"  # /home/runner/work/spring-petclinic/spring-petclinic
 
+env:
+  JF_REGISTRY: "${{ vars.JF_NAME }}.jfrog.io"
+  JF_RT_URL: "https://${{ vars.JF_NAME }}.jfrog.io"
+  JF_OIDC_PROVIDER_NAME: "${{ vars.JF_OIDC_PROVIDER_NAME }}"
+  PROJECT_KEY: "npmapptrust"
+  APPLICATION_KEY: "swaggerapp"
+  RT_REPO_NPM_VIRTUAL: "npmapptrust-virtual"
+  RT_REPO_DOCKER_VIRTUAL: "npmapptrust-docker-virtual"
+  # AppTrust version-create requires SemVer. Run number alone is not SemVer.
+  JFROG_CLI_LOG_LEVEL: DEBUG
+  BUILD_ID: "${{ github.run_number }}"
+  APPLICATION_VERSION: "${{ github.run_number }}.${{ github.run_attempt }}"
+  DEFAULT_WORKSPACE: "${{github.workspace}}"
+  APP_SPEC_JSON: "appver-spec.json"
+  JF_CLI_SERVER_ID: "setup-jfrog-cli"
 jobs:
   dockerPackage:
     name: "Docker Package"
-    env:  
+    env:
       BUILD_NAME: "ga-dkr"
-      DOCKER_BUILDX_PLATFORMS: 'linux/amd64,linux/arm64'
-      DOCKER_METADATA_JSON: 'build-metadata.json'
+      DOCKER_BUILDX_PLATFORMS: "linux/amd64,linux/arm64"
+      DOCKER_FILE: "./jfrog/Dockerfile"
+      DOCKER_METADATA_JSON: "build-metadata.json"
+      DOCKER_IMAGE_FILE: "docker-image.txt"
     defaults:
        run:
          working-directory: "${{env.DEFAULT_WORKSPACE}}"
     runs-on: ubuntu-latest
-    timeout-minutes: 30   # ref  https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_idtimeout-minutes
     steps:
-      # - uses: muldos/ci-traffic-monitor@v1
-      #   with:
-      #     detailed: 'true'
-      # Use the specific setup-cli branch. Ref https://github.com/marketplace/actions/setup-jfrog-cli
-      - name: "Setup JFrog CLI"
-        uses: jfrog/setup-jfrog-cli@v5
-        id: setup-cli
-        env:
-          JF_URL: ${{env.JF_RT_URL}}
-          JF_PROJECT: "${{env.PROJECT_KEY}}"
-          JFROG_CLI_LOG_LEVEL: "${{env.CLI_LOG_LEVEL}}"
-          JFROG_CLI_RELEASES_REPO: '${{env.JF_RT_URL}}/artifactory/${{env.RT_REPO_NPM_VIRTUAL}}' 
-          JFROG_CLI_EXTRACTORS_REMOTE: '${{env.JF_RT_URL}}/artifactory/${{env.RT_REPO_NPM_VIRTUAL}}'
-          JF_GIT_TOKEN: ${{secrets.GITHUB_TOKEN}}      
-        with:
-          version: latest  #2.71.0
-          oidc-provider-name: ${{vars.JF_OIDC_PROVIDER_NAME}}
-          disable-job-summary: ${{env.JOB_SUMMARY}}
-
       - name: "Clone VCS"
-        uses: actions/checkout@v6 # ref: https://github.com/actions/checkout
+        uses: actions/checkout@v7
 
-      - name: "Clean lock files"
-        run: |
-          rm -rf package-lock.json .npmrc
+      - name: "Use Node.js"
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
 
-      - name: "Config jf with repos"
-        run: |
-          jf npmc --global --repo-resolve ${{ env.RT_REPO_NPM_VIRTUAL}} --repo-deploy ${{ env.RT_REPO_NPM_VIRTUAL}} 
-          # jf npm cache clean --force
+      - name: "Setup JFrog CLI"
+        id: "setup-jfrog-cli"
+        uses: jfrog/setup-jfrog-cli@v5
+        env:
+          JF_URL: ${{ env.JF_RT_URL }}
+          JF_PROJECT: ${{ env.PROJECT_KEY }}
+        with:
+          version: latest
+          oidc-provider-name: ${{ env.JF_OIDC_PROVIDER_NAME }}
+          disable-auto-build-publish: "true"
 
       - name: "Create ENV variables"
         run: |
-          echo "SHORT_COMMIT_CODE=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "TODAYS_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+          set -euo pipefail
+          echo "SHORT_COMMIT_CODE=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+          echo "TODAYS_DATE=$(date +'%Y-%m-%d')" >> "$GITHUB_ENV"
+          rm -f package-lock.json .npmrc
 
-      - name: Install dependencies and build
+      - name: "Config jf with repos"
         run: |
-          jf npm install
-          jf npm run build
+          jf npmc --server-id-resolve="${{ env.JF_CLI_SERVER_ID }}" --server-id-deploy="${{ env.JF_CLI_SERVER_ID }}"  --repo-resolve="${{ env.RT_REPO_NPM_VIRTUAL }}" --repo-deploy="${{ env.RT_REPO_NPM_VIRTUAL }}"
 
-      - name: "Docker authentication"  # ref https://github.com/marketplace/actions/docker-login
-        id: config-docker
+      - name: "Install dependencies and build app"
+        run: |
+          set -euo pipefail
+          jf npm install
+          jf npm run build:app
+          test -d build
+
+      - name: "Docker authentication"
         uses: docker/login-action@v4
-        with: 
-          registry: ${{env.JF_REGISTRY}}
-          username: ${{steps.setup-cli.outputs.oidc-user}}
-          password: ${{steps.setup-cli.outputs.oidc-token}}
+        with:
+          registry: ${{ env.JF_REGISTRY }}
+          username: ${{ steps.setup-jfrog-cli.outputs.oidc-user }}
+          password: ${{ steps.setup-jfrog-cli.outputs.oidc-token }}
 
       - name: "Docker: QEMU (cross-arch)"
         uses: docker/setup-qemu-action@v4
 
       - name: "Docker buildx instance"
-        uses: docker/setup-buildx-action@v4   # ref: https://github.com/marketplace/actions/docker-setup-buildx h
+        uses: docker/setup-buildx-action@v4
         with:
-          use: true
           driver: docker-container
-          platforms: ${{env.DOCKER_BUILDX_PLATFORMS}} # linux/amd64,linux/arm64 # ref: https://docs.docker.com/reference/cli/docker/buildx/create/#platform
+          platforms: ${{ env.DOCKER_BUILDX_PLATFORMS }}
+          use: true
 
-      
-      ## Package
-       ### TODO: CA command - docker image
-         
-       ### TODO: Audit command
+      - name: "Set Docker tags"
+        run: |
+          set -euo pipefail
+          echo "tag_build=${{env.JF_REGISTRY}}/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:${{env.BUILD_ID}}" >> "$GITHUB_ENV"
+          echo "tag_date=${{env.JF_REGISTRY}}/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:${{env.TODAYS_DATE}}" >> "$GITHUB_ENV"
+          echo "tag_sha=${{env.JF_REGISTRY}}/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:${{env.SHORT_COMMIT_CODE}}" >> "$GITHUB_ENV"
+          echo "tag_latest="${{env.JF_REGISTRY}}/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:latest" >> "$GITHUB_ENV"
 
       - name: "Package: Docker build and push"
-        env:
-          DOCKER_FILE: "./jfrog/Dockerfile"
-          TAG11: "${{vars.JF_NAME}}.jfrog.io/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:${{env.SHORT_COMMIT_CODE}}"
-          TAG12: "${{vars.JF_NAME}}.jfrog.io/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:${{env.TODAYS_DATE}}" 
-          TAG13: "${{vars.JF_NAME}}.jfrog.io/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:${{env.BUILD_ID}}"
-          TAG14: "${{vars.JF_NAME}}.jfrog.io/${{env.RT_REPO_DOCKER_VIRTUAL}}/${{env.BUILD_NAME}}:latest"
-        run: | # --build-arg JAR_FILE=${{env.JAR_FILE}} 
-          docker buildx build -f ${{env.DOCKER_FILE}} --platform "${{env.DOCKER_BUILDX_PLATFORMS}}" --metadata-file "${{env.DOCKER_METADATA_JSON}}" --push -t ${{env.TAG11}} -t ${{env.TAG12}} -t ${{env.TAG13}} -t ${{env.TAG14}} .
-
-      - name: "Optional: Docker pull image"
         run: |
-          docker pull ${{env.RT_REPO_DOCKER_URL}}
+          set -euo pipefail
+          docker buildx build -f "${{env.DOCKER_FILE}}" --platform "${{env.DOCKER_BUILDX_PLATFORMS}}" --metadata-file "${{env.DOCKER_METADATA_JSON}}" --push -t "${{env.tag_sha}}" -t "${{env.tag_date}}" -t "${{env.tag_build}}" -t "${{env.tag_latest}}" .
 
-      - name: "Package: Docker image list"
+          image_digest="$(jq -er '.["containerimage.digest"]' "${DOCKER_METADATA_JSON}")"
+          case "${image_digest}" in
+            sha256:*) ;;
+            *)
+              echo "Docker metadata is missing a sha256 digest: ${image_digest}" >&2
+              exit 1
+              ;;
+          esac
+          # jf rt bdc accepts one line: <image-tag>@sha256:<manifest-digest>
+          printf '%s@%s\n' "${tag_build}" "${image_digest}" | tee "${DOCKER_IMAGE_FILE}"
+
+      - name: "BuildInfo"
         run: |
-          docker image ls
+          set -euo pipefail
+          test -s "${DOCKER_IMAGE_FILE}"
+          grep -Eq '^[^[:space:]]+@sha256:[0-9a-f]{64}$' "${DOCKER_IMAGE_FILE}"
 
-      # Build Info
-      - name: "BuildInfo: Docker build create"
-        run: |
-          imageDigest=$(jq -r '.["containerimage.digest"]' "${{env.DOCKER_METADATA_JSON}}")
-          echo "DOCKER_IMAGE_DIGEST: ${imageDigest}"
-          echo "DOCKER_IMAGE_DIGEST=${imageDigest}" >> "$GITHUB_ENV"
+          jf rt bdc "${{env.RT_REPO_DOCKER_VIRTUAL}}" \
+            --image-file="${DOCKER_IMAGE_FILE}" \
+            --build-name="${{env.BUILD_NAME}}" \
+            --build-number="${{env.BUILD_ID}}" \
+            --project="${{env.PROJECT_KEY}}"
 
-          echo "${{env.RT_REPO_DOCKER_URL}}@${imageDigest}" > "${{env.DOCKER_METADATA_JSON}}"
+          jf rt bp "${{env.BUILD_NAME}}" "${{env.BUILD_ID}}" \
+            --collect-git-info=true \
+            --collect-env=true \
+            --project="${{env.PROJECT_KEY}}" \
+            --detailed-summary=true
 
-          jf rt bdc ${{env.RT_REPO_VIRTUAL}} --image-file ${{env.DOCKER_METADATA_JSON}} --build-name=${{env.BUILD_NAME}} --build-number=${{env.BUILD_ID}} --project="${{env.PROJECT_KEY}}"
-
-      - name: "BuildInfo: Build Publish"
-        run: |
-          jf rt bce ${{env.BUILD_NAME}} ${{env.BUILD_ID}} --project="${{env.PROJECT_KEY}}"
-          jf rt bag ${{env.BUILD_NAME}} ${{env.BUILD_ID}} --project="${{env.PROJECT_KEY}}" 
-          jf rt bp ${{env.BUILD_NAME}} ${{env.BUILD_ID}} --project="${{env.PROJECT_KEY}}" --detailed-summary=true 
-
-      # App Version
       - name: "AppTrust: create application version"
-        env:
-          APP_SPEC_JSON: ./appver-spec-${{env.APPLICATION_KEY}}-${{env.BUILD_ID}}.json
         run: |
-          cat > "${{env.APP_SPEC_JSON}}" <<EOF
-          {
-            "builds": [
-              {
-                "name": "${{env.BUILD_NAME}}",
-                "number": "${{env.BUILD_ID}}",
-                "repository_key": "${{env.PROJECT_KEY}}-build-info",
-                "include_dependencies": false
-              }
-            ]
-          }
-          EOF
-
-          cat "${{env.APP_SPEC_JSON}}"    # https://docs.jfrog.com/governance/docs/create-application-version-cli
-
-          jf apptrust version-create "${{env.APPLICATION_KEY}}" "${{env.BUILD_ID}}" --spec="${{env.APP_SPEC_JSON}}"       #  --tag="Package"
-
+          set -euo pipefail
+          jq -n \
+            --arg name "${{env.BUILD_NAME}}" \
+            --arg number "${{env.BUILD_ID}}" \
+            --arg repo "${{env.PROJECT_KEY}}-build-info" \
+            '{builds: [{name: $name, number: $number, repository_key: $repo, include_dependencies: false}]}' \
+            > "${{env.APP_SPEC_JSON}}"
+          cat "${APP_SPEC_JSON}"
+          jf apptrust version-create "${{env.APPLICATION_KEY}}" "${{env.APPLICATION_VERSION}}" --spec="${{env.APP_SPEC_JSON}}"
