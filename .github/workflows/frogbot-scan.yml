@@ -74,10 +74,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Install dependencies (root app + findings demo)
-        run: |
-          npm install --ignore-scripts --no-audit --no-fund
-          (cd demo/frogbot-findings 2>/dev/null && npm install --ignore-scripts --no-audit --no-fund || true)
+      - name: Install dependencies (findings demo)
+        run: cd demo/frogbot-findings && npm ci --ignore-scripts --no-audit --no-fund
+        continue-on-error: true
+      - name: Install dependencies (root app)
+        run: npm install --ignore-scripts --no-audit --no-fund
+        continue-on-error: true   # never block the scan; failure only means a smaller SBOM
 
       - uses: jfrog/frogbot@v3
         env:
