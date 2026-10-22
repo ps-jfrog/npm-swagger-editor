@@ -215,6 +215,28 @@ Close the loop with Frogbot: the same Watch and policies produce the **PR commen
 - **CI view:** switch to **CI mode**; **Builds** lists Artifactory builds (set `jfrog.view.ciIntegration.buildNamePattern`, `*` for all). Shows build scan status and artifact security.
 - **Local view** continuously rescans on file save for supported descriptors (watch the scan status bar).
 
+### 5.5 Extra capabilities from the JFrog how-to pages
+
+Sources: [Quick start (source code)](https://docs.jfrog.com/security/docs/quick-start-source-code) (VS Code extension: Local and CI modes) and [How-tos (source code)](https://docs.jfrog.com/security/docs/how-tos-source-code-1) (written for "the IDE"; it never names VS Code, so confirm each item in the extension while you rehearse). Neither page covers Watches, the Project key or settings; that part is section 2.
+
+| Capability | How to demo it | Notes |
+|---|---|---|
+| **CVE quick fix** | in `demo/frogbot-findings/package.json`, open a vulnerable **direct** dependency (for example `lodash` 4.17.15) and use the fix action offered at the vulnerable location in the editor (light bulb) | updates the dependency to a fixed version. Direct dependencies only; the page does not give the exact menu wording, so check it in the extension. Rescan afterwards: the CVEs should drop. Revert with `git checkout -- demo/frogbot-findings/package.json` |
+| **JFrog Research enrichment** | open a CVE (for example XRAY-959813): **JFrog Severity** (likelihood of exploitation), a research summary of the applicability conditions, and remediation steps | only for selected issues |
+| **Contextual Analysis detail** | in the CVE details view check the applicability status, its breakdown and the contextual remediation | needs Xray >= 3.66.5 and the Advanced Security entitlement (confirmed on psazuse) |
+| **SAST data flow** | open a SAST finding in `src/server.js`: data-flow analysis, fix steps and risk severity | injection (SQL, command, code, SSRF) and unsafe API use (encryption, signing, file operations) |
+| **Secrets ignore rule** | add a comment containing `jfrog-ignore` on the line above a secret in `src/config.js`, rescan | the finding disappears. Remove the comment to bring it back |
+| **Ask Copilot to Fix** | right-click a SAST, Secrets, IaC or CVE finding in the JFrog pane > **Ask Copilot to Fix**; a pre-filled Copilot chat opens | needs GitHub Copilot and the **Unified or Ultimate Security Bundle**. Optionally enable the JFrog remote MCP server so dependency upgrades are checked against Curation policy. The page warns that AI output must be reviewed before you act on it |
+| **Severity icon legend** | point at the icons in the tree | Critical, High, Medium, Low, Unknown, plus **Not Applicable** (the CVE exists in the dependency but your code does not use the vulnerable path) |
+| **Local vs CI mode** | switch with the button next to the components tree | **Local**: continuous workspace scan (**Scan/Rescan** or **Start Xray Scan** in the editor). **CI**: build status, links to CI logs and security info for build artifacts and dependencies |
+
+CI mode setup (optional, needs a CI that publishes builds to Artifactory):
+
+1. Configure the CI pipeline so it publishes build info to Artifactory (JFrog CLI `jf rt build-publish`, or the CI plugin).
+2. Switch the extension to **CI** mode.
+3. Extension Settings > **Build name pattern** (`jfrog.view.ciIntegration.buildNamePattern`): the build name, or `*` for all builds.
+4. Click **Builds** and select the build to display; the JFrog panel shows its status and the security data of its artifacts and dependencies.
+
 ## 6. IDE scan vs Frogbot (positioning)
 
 | | JFrog IDE (VS Code) | Frogbot v3 |
@@ -270,6 +292,10 @@ How to combine: use the SwampUp lab for the **Java/WebGoat** and *"malicious ind
 - JFrog extension for VS Code: <https://docs.jfrog.com/security/docs/visual-studio-code-1>
 - Xray policies and Watches in the IDE: <https://docs.jfrog.com/security/docs/manage#xray-policies-and-watches> (two options: JFrog Project, or Xray Watches)
 - IDE overview: <https://jfrog.com/help/r/jfrog-security-user-guide/shift-left-on-security/ides>
+- Quick start (Local and CI modes, severity icons): <https://docs.jfrog.com/security/docs/quick-start-source-code>
+- How-tos (viewing vulnerabilities, Contextual Analysis, SAST, Secrets, IaC, CVE quick fix, Ask Copilot to Fix): <https://docs.jfrog.com/security/docs/how-tos-source-code-1>
+- JFrog remote MCP server: <https://jfrog.com/help/r/jfrog-integrations-documentation/enable-the-jfrog-mcp-server>
+- JFrog Security Research: <https://research.jfrog.com>
 - Extension source: <https://github.com/jfrog/jfrog-vscode-extension> (`src/main/utils/configuration.ts`, `scanLogic/scanGraphLogic.ts`, `connect/connectionManager.ts`; settings in `package.json`)
 - Graph scan client: <https://github.com/jfrog/jfrog-client-js> (`src/Xray/XrayScanClient.ts`, `getUrl`)
 - Frogbot lab and FAQ for the same Watch: [`usefrogbotv3.md`](usefrogbotv3.md)
