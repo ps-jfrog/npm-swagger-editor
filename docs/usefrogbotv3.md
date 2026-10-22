@@ -128,7 +128,7 @@ gh auth login
 FROGBOT_TOKEN=<token> scripts/frogbot/05-github-setup.sh
 ```
 
-Sets environment `frogbot`, secret `FROGBOT_ACCESS_TOKEN`, variables `JF_URL=https://psazuse.jfrog.io`, `JF_PROJECT_KEY=npmapptrust`, Workflow permissions *Read and write* + *Allow GitHub Actions to create and approve pull requests*.
+Sets environment `frogbot`, secret `FROGBOT_ACCESS_TOKEN`, variables `FROGBOT_JF_URL=https://psazuse.jfrog.io`, `JF_PROJECT_KEY=npmapptrust`, Workflow permissions *Read and write* + *Allow GitHub Actions to create and approve pull requests*.
 Add **Required reviewers** on the `frogbot` environment (the PR job exposes secrets via `pull_request_target`; the doc requires the environment, mandatory for public repos and Maven/Gradle projects).
 *OIDC alternative:* create an OpenID Connect integration + identity mapping (claim `repository` = `ps-jfrog/npm-swagger-editor`, long enough token expiry), `gh variable set JF_OIDC_PROVIDER_NAME --body <name>`, and drop the secret.
 *If your org blocks `GITHUB_TOKEN` PR creation:* use a PAT (classic `repo`, or fine-grained Contents + Pull requests = RW) as `JF_GIT_TOKEN`.
@@ -157,7 +157,7 @@ Env/inputs that matter (all optional ones are repo **variables**, so no YAML edi
 
 | Setting | Purpose |
 |---|---|
-| `JF_URL`, secret `FROGBOT_ACCESS_TOKEN` (or `oidc-provider-name`) | connection |
+| repo variable `FROGBOT_JF_URL` (→ `JF_URL`), secret `FROGBOT_ACCESS_TOKEN` (or `oidc-provider-name`) | connection. UI: repo → Settings → Secrets and variables → Actions → **Variables** tab → *Repository variables* → **New repository variable** |
 | `JF_GIT_TOKEN` = `GITHUB_TOKEN` | PR comments, fix PRs |
 | `JF_PROJECT_KEY` (default `npmapptrust`) | project Watches/policies + project-scoped `npmapptrust-frogbot` repo |
 | `JF_GIT_WORKSPACE` (var, or the manual-run input `workspace`) | workspace to scan, §9 |
@@ -324,6 +324,7 @@ jf audit --server-id psazuse --watches npmapptrust-swagger-editor-frogbot --sca
 | Secret on `.git/config` | false positive; exclude `**/.git/**` |
 | Secrets not in PR comment | enable *show findings in PR decoration* (`show_secrets_as_pr_comment`); gating is independent |
 | Op-risk fails check but no comment text | known gap (FAQ Q9); read the job log |
+| `OIDC authentication against JFrog platform failed … HTTP 404 … oidc integration doesn't exist` | The action is calling the wrong platform or provider name. Check **org-level** variables too (Settings → Secrets and variables → Actions → Variables → *Organization variables*): the `ps-jfrog` org defines `JF_URL=https://psemea.jfrog.io` and `JF_OIDC_PROVIDER_NAME=krishnam-github-org-all-repos`, so a workflow reading `vars.JF_URL` hit psemea. Fix: set repo variable `FROGBOT_JF_URL=https://psazuse.jfrog.io` (the workflow reads this name). The org provider `krishnam-github-org-all-repos` does exist on psazuse and its mapping `ps-jfrog/**` grants admin for 30 min, so OIDC works once the URL is right. To use a token instead, remove the `oidc-provider-name:` lines from the workflow (an org-level variable can't be blanked per repo) and add the `FROGBOT_ACCESS_TOKEN` secret |
 | Frogbot repo/index errors on first scan | `npmapptrust-frogbot` missing, not indexed, or no Deploy permission (§3.1) |
 | No v2 results after first scan | expected: first v3 scan switches the repo permanently |
 | Frogbot proposes a version blocked by Curation | Frogbot does not consult Curation |

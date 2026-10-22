@@ -8,7 +8,7 @@ PLATFORM_URL=$(jf config show "$SERVER_ID" | awk -F'\t+' '/JFrog Platform URL/{p
 
 gh api -X PUT "repos/${GH_REPO}/environments/frogbot" >/dev/null && echo "environment 'frogbot' ready"
 gh secret   set FROGBOT_ACCESS_TOKEN --env frogbot --repo "$GH_REPO" --body "$FROGBOT_TOKEN"
-gh variable set JF_URL           --repo "$GH_REPO" --body "$PLATFORM_URL"
+gh variable set FROGBOT_JF_URL   --repo "$GH_REPO" --body "$PLATFORM_URL"
 gh variable set JF_PROJECT_KEY   --repo "$GH_REPO" --body "$PROJECT_KEY"
 # optional knobs (uncomment to demo):
 # gh variable set JF_GIT_WORKSPACE        --repo "$GH_REPO" --body "swagger-app"

@@ -26,9 +26,9 @@ permissions:
   id-token: write         # only needed when using OIDC (oidc-provider-name)
 
 env:
-  # Full platform URL of the psazuse instance, set as repo/environment *variable* JF_URL
-  # (e.g. https://psazuse.jfrog.io). Falls back to the demo instance.
-  JF_URL: ${{ vars.JF_URL || 'https://psazuse.jfrog.io' }}
+  # Full platform URL, from repo variable FROGBOT_JF_URL (deliberately NOT 'JF_URL': an org-level JF_URL
+  # pointing at another instance would silently win). Falls back to the psazuse demo instance.
+  JF_URL: ${{ vars.FROGBOT_JF_URL || 'https://psazuse.jfrog.io' }}
   # Optional: JFrog Project key. With a project key, the Project's Watches apply even if no
   # Watch is attached directly to the git repo.
   JF_PROJECT_KEY: ${{ vars.JF_PROJECT_KEY || 'npmapptrust' }}
