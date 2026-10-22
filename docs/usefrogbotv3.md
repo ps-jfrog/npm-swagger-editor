@@ -151,7 +151,7 @@ After the first scan: Indexed Resources → Git Repositories → `npm-swagger-ed
 | Event | Job | Command run by the action |
 |---|---|---|
 | `pull_request_target` (opened/synchronize/reopened) | `scan-pull-request` | `frogbot scan-pull-request` |
-| push to `main`, nightly cron, `workflow_dispatch` | `scan-repository` | `frogbot scan-repository` |
+| push to `main`, `workflow_dispatch` (nightly cron is commented out) | `scan-repository` | `frogbot scan-repository` |
 
 Env/inputs that matter (all optional ones are repo **variables**, so no YAML edit between demos):
 
@@ -450,3 +450,34 @@ Raw findings show in Scans List (Exposures, SAST tabs); violations show in Watch
 - Public repo: push protection did not block the fake private key in `demo/frogbot-findings/src/config.js`, but real-looking provider tokens (`ghp_`, `AKIA...`) would be blocked, so the demo uses generic fake secrets.
 - The banner "Please review the repository settings and select Push Configuration..." in the Xray UI is about unrelated federated repos.
 - Order of the live demo that worked well: (1) show `04-verify.sh` (Watch + profile), (2) push or re-run, (3) log: `Found` lines and the `fail_build` exit code 3, (4) Xray Scans List for the commit, (5) `06-violations-summary.sh`.
+
+
+---
+
+## 17. What is extra in `demo/frogbot-findings` (vs `main`) and how to use it
+
+`main` carries everything reusable: workflow, docs, `scripts/frogbot/*`, the Xray policies/Watch setup. The branch adds **only** the items below. **Do not merge it into `main`.**
+
+| Extra on `demo/frogbot-findings` | Purpose |
+|---|---|
+| `demo/frogbot-findings/package.json` + force-added `package-lock.json` | Vulnerable deps for SCA, contextual analysis, license and malicious-package findings: lodash 4.17.15, minimist 1.2.0, axios 0.21.1, express 4.17.1, jsonwebtoken 8.5.1, request 2.88.2, `glpk.js` (GPL-3.0 vs `ban-copyleft`), `@step-security/malware-simulator@0.0.3` (safe EICAR-like test package from the curation trip-test kit) |
+| `demo/frogbot-findings/src/server.js` | SAST: command injection, `eval`, path traversal, XSS, SQL injection, open redirect, SSRF, weak hash, insecure cookie; also calls the vulnerable lodash/minimist functions so CVEs are *applicable* |
+| `demo/frogbot-findings/src/config.js` | Secrets: fake keys, tokens and an RSA private key block (all fake) |
+| `demo/frogbot-findings/iac/main.tf` | IaC: public S3 bucket, `0.0.0.0/0` security group, unencrypted public DB |
+| `demo/frogbot-findings/README.md` | Warns that the folder is intentionally vulnerable |
+| Workflow: `push` trigger also on `demo/**` | pushing the branch (or any `demo/*` branch) starts a repository scan |
+| Workflow: extra install step `npm ci` in `demo/frogbot-findings` | resolves the demo deps (non-blocking) |
+
+Effect: scans of the branch go **red (exit code 3)** by design (Critical/High CVEs, GPL license, secrets match Fail Build rules), while scans of `main` stay green (root app only: operational-risk and sub-High CVEs, nothing matches a fail rule).
+
+### 17.1 Better ways to use the branch
+
+| Goal | How |
+|---|---|
+| Demo `scan-pull-request` (PR comment, red check, Code Scanning alerts) | Open a PR **from** `demo/frogbot-findings` **into** `main` and **never merge it**. `pull_request_target` runs the workflow as it exists on `main`, so the PR scan uses `main`'s workflow. That version has no demo-folder install, so if the PR scan comes back empty, rely on the committed lockfile or add the demo install step to `main`'s workflow |
+| Demo `scan-repository` with real findings on demand | `gh workflow run "Frogbot Scan" --ref demo/frogbot-findings` or push any commit to the branch |
+| Keep the dirty fixture away from the team | Leave the branch unmerged. It is the "dirty" fixture; `main` stays clean and green |
+| Show before/after of a fix | Branch from `demo/frogbot-findings`, remove or upgrade one dependency (for example lodash to a fixed version), open a PR into the demo branch: the diff scan reports only what changed |
+| Reset the lab | Close the demo PR, delete the branch (`git push github-ps-jfrog --delete demo/frogbot-findings`), and run `scripts/frogbot/99-teardown.sh` for the Xray objects |
+
+If someone does want the seeded content on `main` anyway, the safer variant is to merge only `demo/frogbot-findings/` (no workflow changes) and add `demo/**` to the Config Profile's *Global exclude paths*, so team scans stay clean. That hides the findings from `main` scans, so it defeats the demo. A PR from the branch is the better option.

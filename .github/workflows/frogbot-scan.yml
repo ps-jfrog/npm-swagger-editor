@@ -10,8 +10,9 @@ on:
     types: [opened, synchronize, reopened]
   push:
     branches: [main, 'demo/**']
-  schedule:
-    - cron: "0 2 * * *"
+  # Nightly scan disabled (shared repo). Scheduled workflows only run from the default branch (main).
+  # schedule:
+  #   - cron: "0 2 * * *"
   workflow_dispatch:
     inputs:
       workspace:
