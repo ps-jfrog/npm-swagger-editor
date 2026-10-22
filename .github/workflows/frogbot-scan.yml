@@ -1,30 +1,81 @@
 name: "Frogbot Scan"
-on: push
+
+# Frogbot v3 demo workflow (see docs/usefrogbotv3.md)
+#   - scan-pull-request : runs on PRs, diff-scans what the PR introduces, comments on the PR
+#   - scan-repository   : runs on push to main / nightly / manually, opens fix PRs for vulnerable deps
+# Everything else (scanners on/off, auto-fix PRs, secrets in PR comments, fail rules) is configured
+# server-side in the JFrog Platform (Config Profile + Xray Watch/Policy). There is no JF_FAIL in v3.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      workspace:
+        description: "Frogbot workspace (Xray Git Repositories > Manage Workspaces). Empty = 'default'"
+        required: false
+        default: ""
+
 permissions:
-  contents: read
-  security-events: write
-  # [Mandatory if using OIDC authentication protocol instead of JF_ACCESS_TOKEN]
-  id-token: write
+  contents: write         # scan-repository: push fix branches
+  pull-requests: write    # PR comments + fix PRs
+  security-events: write  # upload SARIF / code scanning results
+  id-token: write         # only needed when using OIDC (oidc-provider-name)
+
 env:
-  JF_RT_URL: "https://${{vars.JF_NAME}}.jfrog.io"
-  PROJECT_KEY: "npmapptrust"
-  # refer: https://docs.jfrog.com/security/docs/how-to-commit-scan-and-pr-scan
+  # Full platform URL of the psazuse instance, set as repo/environment *variable* JF_URL
+  # (e.g. https://psazuse.jfrog.io). Falls back to the demo instance.
+  JF_URL: ${{ vars.JF_URL || 'https://psazuse.jfrog.io' }}
+  # Optional: JFrog Project key. With a project key, the Project's Watches apply even if no
+  # Watch is attached directly to the git repo.
+  JF_PROJECT_KEY: ${{ vars.JF_PROJECT_KEY || 'npmapptrust' }}
+  # Workspace = named scan unit of this repo with its own Config Profile (manual runs can pass an input).
+  JF_GIT_WORKSPACE: ${{ inputs.workspace || vars.JF_GIT_WORKSPACE }}
+  # Air-gapped / proxied scanner + Frogbot download: Artifactory *repo name* (no server-id prefix).
+  JF_RELEASES_REPO: ${{ vars.JF_RELEASES_REPO }}
+  # SAST scan mode for large repos: codebase (default) | directory | file
+  JF_SAST_DEFAULT_SCAN_MODE: ${{ vars.JF_SAST_DEFAULT_SCAN_MODE }}
+  # Use "DEBUG" to see Watch matching and 'fail_pull_request' decisions; "INFO" once the demo works.
+  JFROG_CLI_LOG_LEVEL: ${{ vars.JFROG_CLI_LOG_LEVEL || 'DEBUG' }}
+
 jobs:
+  scan-pull-request:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    environment: frogbot   # add "required reviewers" on this environment to gate fork PRs (secrets!)
+    steps:
+      # No checkout needed: Frogbot clones the repo and diffs source vs target branch itself.
+      - uses: jfrog/frogbot@v3
+        env:
+          # Auth option A: access token stored as an *environment secret* named FROGBOT_ACCESS_TOKEN
+          JF_ACCESS_TOKEN: ${{ secrets.FROGBOT_ACCESS_TOKEN }}
+          JF_GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PR findings -> GitHub Code Scanning (Security tab). Needs GitHub Advanced Security / public repo.
+          JF_UPLOAD_PR_SECURITY_RESULTS_TO_VCS: ${{ vars.JF_UPLOAD_PR_SECURITY_RESULTS_TO_VCS || 'true' }}
+        with:
+          version: latest
+          # Auth option B: OIDC. Set repo variable JF_OIDC_PROVIDER_NAME and leave the secret empty.
+          oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER_NAME }}
+
   scan-repository:
+    if: github.event_name != 'pull_request_target'
     runs-on: ubuntu-latest
     environment: frogbot
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.ref_name }}   # github.head_ref is empty outside pull_request events
 
-      - uses: jfrog/frogbot@v3  # ref: https://github.com/jfrog/frogbot
+      - uses: jfrog/frogbot@v3
         env:
-          JF_URL: "${{env.JF_RT_URL}}"
-          JF_PROJECT: "${{env.PROJECT_KEY}}"
-          JFROG_CLI_LOG_LEVEL: "DEBUG"
-        #   JF_GIT_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-          ACTIONS_ALLOW_UNSECURE_NODE_VERSION: true  # Allow secure Node fallback
+          JF_ACCESS_TOKEN: ${{ secrets.FROGBOT_ACCESS_TOKEN }}
+          JF_GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JF_GIT_BASE_BRANCH: ${{ github.ref_name }}
+          # SBOM -> GitHub Dependency Graph (default true; needs contents: write)
+          JF_UPLOAD_SBOM_TO_VCS: ${{ vars.JF_UPLOAD_SBOM_TO_VCS || 'true' }}
         with:
-            version: latest #2.71.0
-            oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER_NAME }}
+          version: latest
+          oidc-provider-name: ${{ vars.JF_OIDC_PROVIDER_NAME }}
