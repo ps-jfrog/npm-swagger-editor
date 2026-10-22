@@ -325,6 +325,9 @@ jf audit --server-id psazuse --watches npmapptrust-swagger-editor-frogbot --sca
 | Secrets not in PR comment | enable *show findings in PR decoration* (`show_secrets_as_pr_comment`); gating is independent |
 | Op-risk fails check but no comment text | known gap (FAQ Q9); read the job log |
 | `OIDC authentication against JFrog platform failed … HTTP 404 … oidc integration doesn't exist` | The action is calling the wrong platform or provider name. Check **org-level** variables too (Settings → Secrets and variables → Actions → Variables → *Organization variables*): the `ps-jfrog` org defines `JF_URL=https://psemea.jfrog.io` and `JF_OIDC_PROVIDER_NAME=krishnam-github-org-all-repos`, so a workflow reading `vars.JF_URL` hit psemea. Fix: set repo variable `FROGBOT_JF_URL=https://psazuse.jfrog.io` (the workflow reads this name). The org provider `krishnam-github-org-all-repos` does exist on psazuse and its mapping `ps-jfrog/**` grants admin for 30 min, so OIDC works once the URL is right. To use a token instead, remove the `oidc-provider-name:` lines from the workflow (an org-level variable can't be blanked per repo) and add the `FROGBOT_ACCESS_TOKEN` secret |
+| `failed to run Sast scan … exit status 51` then `frogbot failed with exit code 1` | A scanner errored and the repo's Config Profile has **Fail on scan error** (`fail_upon_any_scanner_error`) on, so the job fails instead of skipping the scanner. Seen when `node_modules` was installed and no exclude paths were set. Install dependencies before Frogbot (npm SCA gives an empty SBOM otherwise) **and** exclude `**/node_modules/**`. Fix: Configure → Scans → **Global Exclude Paths** `**/node_modules/**`, `**/.git/**`; use `JF_SAST_DEFAULT_SCAN_MODE=directory` for large repos; untick *Fail on scan error* if you prefer partial results |
+| Scan green, findings counted in the log (`Found 290 SAST…`) but Xray shows **no violations**; log has `artifact at path npmapptrust-frogbot/… does not exist in Artifactory` / `failed to get violations … Partial results are allowed` | The Frogbot repo is not **indexed by Xray** (`xrayIndex` false), so the uploaded SBOM is never scanned and the Watch is never evaluated. Fix: `scripts/frogbot/01-precreate-frogbot-repo.sh` (sets `xrayIndex=true`) or Administration → Xray Settings → Indexed Resources → add the repo. `04-verify.sh` prints the flag |
+| `failed to upload SBOM snapshot to GitHub … Dependency graph is disabled` | Enable it: repo Settings → Advanced Security → **Dependency graph** |
 | Frogbot repo/index errors on first scan | `npmapptrust-frogbot` missing, not indexed, or no Deploy permission (§3.1) |
 | No v2 results after first scan | expected: first v3 scan switches the repo permanently |
 | Frogbot proposes a version blocked by Curation | Frogbot does not consult Curation |
@@ -341,3 +344,109 @@ jf audit --server-id psazuse --watches npmapptrust-swagger-editor-frogbot --sca
 - Advanced management and configuration: <https://docs.jfrog.com/security/docs/advanced-management-and-configuration>
 - Xray policies and Watches: <https://docs.jfrog.com/security/docs/policies-in-jfrog-xray>
 - Source: <https://github.com/jfrog/frogbot> (local clone `~/mycode/github-jfrog/frogbot`, FAQ `docs/frogbot-v3-faq.md`)
+
+---
+
+## 15. Findings demo branch (`demo/frogbot-findings`)
+
+`main` scans clean (SBOM 0, no findings): lockfiles are gitignored here, so Frogbot saw no resolvable dependency graph.
+Branch `demo/frogbot-findings` (do **not** merge) adds `demo/frogbot-findings/` with intentionally vulnerable sample content and
+installs dependencies before the scan. Verified locally with `jf audit --watches npmapptrust-swagger-editor-frogbot --sca --secrets --sast --iac`:
+
+| Xray category | Seeded by | Local result |
+|---|---|---|
+| CVEs / Policy violations (security) | `package.json`: lodash 4.17.15, minimist 1.2.0, axios 0.21.1, express 4.17.1, jsonwebtoken 8.5.1, request 2.88.2 | 33 SCA violations (7 Critical, 26 High), 2 applicable (contextual) CVEs |
+| Malicious package | `@step-security/malware-simulator@0.0.3`: the safe "EICAR-equivalent" from `xray_sbom_scans/curation/trip_test_demo_kit` (Catalog-flagged `knownToBeMalicious`) | Critical violation XRAY-257512 |
+| Software components / License | `glpk.js` (GPL-3.0) vs policy `ban-copyleft` | 1 license violation |
+| Operational risk | old/unmaintained deps (e.g. `request`) | 105 violations |
+| Exposures: Secrets | `src/config.js` (fake keys, private key) | 5 secrets |
+| Exposures: IaC | `iac/main.tf` (public S3, open SG, unencrypted DB) | 8 findings |
+| SAST | `src/server.js` (command injection, eval, SQLi, XSS, SSRF, path traversal, weak crypto...) | 19 findings |
+
+Note: the local `jf audit` run only turned SCA/license/op-risk findings into policy violations, but **Frogbot's real run in CI also produced Secrets violations** (see §16.8). IaC and SAST findings stay raw findings (Exposures / SAST tabs) with the current policies.
+Heads-up: the default profile has Auto-Fix PRs on, so a scan of this branch may open fix PRs targeting it. Untick *Create automated fixes* in the repo's Configure drawer first if you do not want that (already done for this lab).
+
+
+---
+
+## 16. Lessons learned and demo tips (from the live runs)
+
+### 16.1 Verified end-to-end result (run on branch `demo/frogbot-findings`)
+
+| What | Value |
+|---|---|
+| Scan duration (scan-repository, installs + all scanners) | about 2m15s |
+| Findings in the Frogbot log | 8 IaC, 5 secrets, 290 SAST (includes the root swagger-editor source), 89 SCA vulnerabilities, 3 applicable (contextual) CVEs, SBOM of about 1,330 components |
+| Policy violations in Xray for the Watch (`scripts/frogbot/06-violations-summary.sh`) | 906: 832 operational risk, 72 Security (11 Critical, 50 High, 11 Medium) = 67 CVE/malicious + 5 Secrets exposures, 2 license (GPL) |
+| Job result | **red, exit code 3** = a *Fail Build* rule matched (intended) |
+
+### 16.2 Exit codes
+
+| Frogbot exit code | Meaning |
+|---|---|
+| 0 | scan done, nothing matched a fail rule |
+| 3 | a violation matched **Fail Build** (repo scan) or **Fail Pull Request** (PR scan) |
+| 1 | a real error (auth, scanner, upload...). Read the log. Seen: OIDC 404, SAST `exit status 51` |
+
+### 16.3 The platform must be set up before the first scan (order matters)
+
+1. Frogbot repo `<project-key>-frogbot` exists **and has `xrayIndex=true`**. If not, Frogbot uploads the SBOM but Xray never scans it, the log warns `artifact at path ... does not exist in Artifactory` and the run still ends green with **zero violations**. `04-verify.sh` prints the flag.
+2. Policies + Watch on the git repo URL (`02`, `03`). The Watch does not need the repo to be registered yet.
+3. Config Profile tweaks (UI): see 16.5.
+4. GitHub: environment, secret/OIDC, variables (`05`), **Dependency graph** enabled if you want the SBOM in GitHub.
+
+### 16.4 Partial results hide failures, so read the log, not just the colour
+
+`Partial results are allowed, the error is skipped` is a *Warn*. A green job can still mean "no violations because the violation step failed". In the log search for: `[Warn]`, `Found N`, `failed to get violations`, `dummy mode` (harmless: it is the analyzer's offline flag), `exit status`.
+For quick triage without GitHub login: job steps and annotations are public (`curl https://api.github.com/repos/<repo>/actions/runs/<id>/jobs`, `.../check-runs/<job-id>/annotations`). **Full logs need a login** (UI: run page, gear icon, *Download log archive*, or `gh run view <id> --log`).
+
+### 16.5 Recommended Config Profile for this demo (Configure drawer)
+
+| Setting | Value | Why |
+|---|---|---|
+| Exclude paths | `**/node_modules/**`, `**/.git/**` | otherwise SAST scans `node_modules` and dies (`exit status 51`) |
+| Fail the scan if any scanner fails | **off** for the demo | a flaky scanner then skips instead of failing the job (turn **on** in production) |
+| Create automated fixes (Auto-Fix) | off while scanning demo branches | avoids a pile of fix PRs |
+| Show findings in PR decoration (secrets) | on | secrets in the PR comment |
+| Include vulnerabilities and violations | on | show everything, not only the policy violations |
+
+Verify what Frogbot will really receive (UI edits are easy to mis-save): `scripts/frogbot/04-verify.sh` prints the profile for the clone URL (`fail_upon_any_scanner_error`, `exclude_patterns`).
+
+### 16.6 npm specifics
+
+- Frogbot's npm SCA needs the dependencies **installed** (or resolvable). With no `node_modules` the SBOM is empty and every counter is 0. The workflow runs `setup-node` plus `npm install --ignore-scripts` (non-blocking) before Frogbot. Lockfiles are gitignored here, so the demo folder's lockfile is committed with `git add -f`.
+- Pair that with the `node_modules` exclude (16.5). Installing without the exclude breaks SAST.
+- Use `--ignore-scripts`: the demo includes `@step-security/malware-simulator` (a harmless EICAR-like package whose `preinstall` makes one benign call).
+- Root app scan adds noise (832 operational-risk, many SAST). To keep the demo crisp, exclude `src/**` and the root `package.json` via *Global exclude* / *include paths* `demo/frogbot-findings/**`, or use a workspace (section 9).
+
+### 16.7 Variables: avoid org-level collisions
+
+The `ps-jfrog` org defines `JF_URL` (a different instance) and `JF_OIDC_PROVIDER_NAME`. Repo/workflow code that reads `vars.JF_URL` silently picks the org value, so use the dedicated repo variable `FROGBOT_JF_URL`. The org provider `krishnam-github-org-all-repos` exists on psazuse and maps `ps-jfrog/**` to admin (30 min tokens), so OIDC works with no stored secret.
+
+### 16.8 What turns into a policy violation
+
+| Finding type | Violation with current policies? | Note |
+|---|---|---|
+| CVEs (SCA), malicious package | yes | `cve-high-critical`, `malicious-packages` |
+| Secrets / private keys | **yes** (5 in the run) | `secrets-exposed` (exposures, secrets on) |
+| License (GPL) | yes | `ban-copyleft` |
+| Operational risk | yes, very many | report-only, tune `op_risk_min_risk` or drop the policy from the Watch if noisy |
+| IaC | no, raw findings only | `exposures.iac` is off in the rule; enable it to get IaC violations |
+| SAST | no, raw findings only | rule `sast-report-only` (>= Medium) did not match; raise/adjust rules in the policy |
+
+Raw findings show in Scans List (Exposures, SAST tabs); violations show in Watch Violations and the Policy Violations tile.
+
+### 16.9 Reading results programmatically
+
+- `scripts/frogbot/06-violations-summary.sh`: counts per type/severity and Security by kind (`XRAY-*` = CVE/malicious, `EXP-*` = exposure). It pages the Xray violations API (default page is 500, so a naive call under-counts).
+- Violations keep arriving for 1 to 2 minutes after the run ends (729 then 906 in one run). Wait before demoing the numbers.
+- `POST /xray/api/v1/xsc/profile_repos {"repo_url": "..."}` shows the profile; `GET /xray/api/v1/xsc/watches/resource?git_repository=...&project=...` shows the matched Watches.
+
+### 16.10 Misc
+
+- Re-running a job (`Re-run jobs`) reuses the same commit and the **current** platform settings, so it is the quickest way to test a Config Profile change.
+- `No runs found in the SARIF report, skipping upload to GitHub Security Tab` means nothing to upload (or no violations at that moment).
+- `failed to upload SBOM snapshot to GitHub ... Dependency graph is disabled`: enable it in repo Settings, Advanced Security.
+- Public repo: push protection did not block the fake private key in `demo/frogbot-findings/src/config.js`, but real-looking provider tokens (`ghp_`, `AKIA...`) would be blocked, so the demo uses generic fake secrets.
+- The banner "Please review the repository settings and select Push Configuration..." in the Xray UI is about unrelated federated repos.
+- Order of the live demo that worked well: (1) show `04-verify.sh` (Watch + profile), (2) push or re-run, (3) log: `Found` lines and the `fail_build` exit code 3, (4) Xray Scans List for the commit, (5) `06-violations-summary.sh`.

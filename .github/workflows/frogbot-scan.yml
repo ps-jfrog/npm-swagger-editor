@@ -37,7 +37,7 @@ env:
   # Air-gapped / proxied scanner + Frogbot download: Artifactory *repo name* (no server-id prefix).
   JF_RELEASES_REPO: ${{ vars.JF_RELEASES_REPO }}
   # SAST scan mode for large repos: codebase (default) | directory | file
-  JF_SAST_DEFAULT_SCAN_MODE: ${{ vars.JF_SAST_DEFAULT_SCAN_MODE }}
+  JF_SAST_DEFAULT_SCAN_MODE: ${{ vars.JF_SAST_DEFAULT_SCAN_MODE || 'directory' }}
   # Use "DEBUG" to see Watch matching and 'fail_pull_request' decisions; "INFO" once the demo works.
   JFROG_CLI_LOG_LEVEL: ${{ vars.JFROG_CLI_LOG_LEVEL || 'DEBUG' }}
 
@@ -68,6 +68,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.ref_name }}   # github.head_ref is empty outside pull_request events
+
+      # Frogbot v3 npm SCA needs installed dependencies (otherwise empty SBOM, zero findings). Lockfiles are
+      # gitignored here. The repo's Config Profile must exclude **/node_modules/** or SAST fails (exit status 51).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+        continue-on-error: true   # never block the scan; failure only means a smaller SBOM
 
       - uses: jfrog/frogbot@v3
         env:

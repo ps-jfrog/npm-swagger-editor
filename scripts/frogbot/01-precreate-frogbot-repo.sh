@@ -8,17 +8,16 @@ if [[ "$(http_code GET "artifactory/api/repositories/${FROGBOT_REPO}")" == "200"
 else
   echo "creating generic local repo ${FROGBOT_REPO} in project ${PROJECT_KEY}"
   api PUT "artifactory/api/repositories/${FROGBOT_REPO}?" \
-    "{\"key\":\"${FROGBOT_REPO}\",\"projectKey\":\"${PROJECT_KEY}\",\"rclass\":\"local\",\"packageType\":\"generic\",\"description\":\"Frogbot v3 scan artifacts\"}"
+    "{\"key\":\"${FROGBOT_REPO}\",\"projectKey\":\"${PROJECT_KEY}\",\"rclass\":\"local\",\"packageType\":\"generic\",\"xrayIndex\":true,\"description\":\"Frogbot v3 scan artifacts\"}"
   echo
 fi
 
-echo "adding ${FROGBOT_REPO} to Xray indexed resources (skips if already indexed)"
-if api GET "xray/api/v1/binMgr/default/repos" | grep -q "\"name\":\"${FROGBOT_REPO}\""; then
+echo "ensuring ${FROGBOT_REPO} is indexed by Xray (xrayIndex=true)"
+if [[ "$(api GET "artifactory/api/repositories/${FROGBOT_REPO}" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("xrayIndex"))')" == "True" ]]; then
   echo "already indexed"
 else
-  api POST "xray/api/v1/binMgr/default/repos" \
-    "{\"indexed_repos\":[{\"name\":\"${FROGBOT_REPO}\",\"type\":\"local\",\"pkg_type\":\"Generic\"}]}"
-  echo
+  api POST "artifactory/api/repositories/${FROGBOT_REPO}" '{"xrayIndex":true}'; echo
 fi
+# Without this Frogbot's SBOM upload is never scanned: "artifact at path <repo>/... does not exist in Artifactory"
 echo "NOTE: grant the Frogbot identity (token user) 'Deploy' on ${FROGBOT_REPO}:"
 echo "      Administration > User Management > Permissions (or the project's Roles)."
