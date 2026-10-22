@@ -37,7 +37,7 @@ env:
   # Air-gapped / proxied scanner + Frogbot download: Artifactory *repo name* (no server-id prefix).
   JF_RELEASES_REPO: ${{ vars.JF_RELEASES_REPO }}
   # SAST scan mode for large repos: codebase (default) | directory | file
-  JF_SAST_DEFAULT_SCAN_MODE: ${{ vars.JF_SAST_DEFAULT_SCAN_MODE }}
+  JF_SAST_DEFAULT_SCAN_MODE: ${{ vars.JF_SAST_DEFAULT_SCAN_MODE || 'directory' }}
   # Use "DEBUG" to see Watch matching and 'fail_pull_request' decisions; "INFO" once the demo works.
   JFROG_CLI_LOG_LEVEL: ${{ vars.JFROG_CLI_LOG_LEVEL || 'DEBUG' }}
 
@@ -69,17 +69,8 @@ jobs:
         with:
           ref: ${{ github.ref_name }}   # github.head_ref is empty outside pull_request events
 
-      # Frogbot builds the dependency graph from installed deps / lockfiles. Lockfiles are gitignored in
-      # this repo, so install first (otherwise the scan can report an empty SBOM and zero findings).
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Install dependencies (findings demo)
-        run: cd demo/frogbot-findings && npm ci --ignore-scripts --no-audit --no-fund
-        continue-on-error: true
-      - name: Install dependencies (root app)
-        run: npm install --ignore-scripts --no-audit --no-fund
-        continue-on-error: true   # never block the scan; failure only means a smaller SBOM
+      # No 'npm install' here on purpose: node_modules in the workspace gets scanned by SAST/secrets and made the
+      # scan fail (SAST exit status 51). demo/frogbot-findings has a committed package-lock.json instead.
 
       - uses: jfrog/frogbot@v3
         env:
