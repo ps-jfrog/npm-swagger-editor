@@ -343,6 +343,7 @@ jf audit --server-id psazuse --watches npmapptrust-swagger-editor-frogbot --sca
 - Workspaces: <https://docs.jfrog.com/security/docs/manage-frogbot-workspaces>
 - Advanced management and configuration: <https://docs.jfrog.com/security/docs/advanced-management-and-configuration>
 - Xray policies and Watches: <https://docs.jfrog.com/security/docs/policies-in-jfrog-xray>
+- IDE scan lab (VS Code extension, how the IDE picks Watches/Project, SwampUp 2025 IDE lab): [`jfrog-ide-scan-vscode.md`](jfrog-ide-scan-vscode.md)
 - Source: <https://github.com/jfrog/frogbot> (local clone `~/mycode/github-jfrog/frogbot`, FAQ `docs/frogbot-v3-faq.md`)
 
 ---

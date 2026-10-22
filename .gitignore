@@ -52,3 +52,5 @@ package-lock.json
 .npmrc
 /.npmrc
 suggestions/
+# demo branch: seeded folder installs here for the VS Code IDE scan lab
+/demo/frogbot-findings/node_modules
