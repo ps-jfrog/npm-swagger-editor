@@ -341,3 +341,25 @@ jf audit --server-id psazuse --watches npmapptrust-swagger-editor-frogbot --sca
 - Advanced management and configuration: <https://docs.jfrog.com/security/docs/advanced-management-and-configuration>
 - Xray policies and Watches: <https://docs.jfrog.com/security/docs/policies-in-jfrog-xray>
 - Source: <https://github.com/jfrog/frogbot> (local clone `~/mycode/github-jfrog/frogbot`, FAQ `docs/frogbot-v3-faq.md`)
+
+---
+
+## 15. Findings demo branch (`demo/frogbot-findings`)
+
+`main` scans clean (SBOM 0, no findings): lockfiles are gitignored here, so Frogbot saw no resolvable dependency graph.
+Branch `demo/frogbot-findings` (do **not** merge) adds `demo/frogbot-findings/` with intentionally vulnerable sample content and
+installs dependencies before the scan. Verified locally with `jf audit --watches npmapptrust-swagger-editor-frogbot --sca --secrets --sast --iac`:
+
+| Xray category | Seeded by | Local result |
+|---|---|---|
+| CVEs / Policy violations (security) | `package.json`: lodash 4.17.15, minimist 1.2.0, axios 0.21.1, express 4.17.1, jsonwebtoken 8.5.1, request 2.88.2 | 33 SCA violations (7 Critical, 26 High), 2 applicable (contextual) CVEs |
+| Malicious package | `@step-security/malware-simulator@0.0.3`: the safe "EICAR-equivalent" from `xray_sbom_scans/curation/trip_test_demo_kit` (Catalog-flagged `knownToBeMalicious`) | Critical violation XRAY-257512 |
+| Software components / License | `glpk.js` (GPL-3.0) vs policy `ban-copyleft` | 1 license violation |
+| Operational risk | old/unmaintained deps (e.g. `request`) | 105 violations |
+| Exposures: Secrets | `src/config.js` (fake keys, private key) | 5 secrets |
+| Exposures: IaC | `iac/main.tf` (public S3, open SG, unencrypted DB) | 8 findings |
+| SAST | `src/server.js` (command injection, eval, SQLi, XSS, SSRF, path traversal, weak crypto...) | 19 findings |
+
+Note: in the local `jf audit` run only SCA/license/op-risk findings became *policy violations*; Secrets, IaC and SAST are reported as raw findings
+(Exposures / SAST tabs). Whether Frogbot's git-repo context also turns them into violations should be checked after the first run.
+Heads-up: the default profile has Auto-Fix PRs on, so a scan of this branch may open fix PRs targeting it. Untick *Create automated fixes* in the repo's Configure drawer first if you do not want that.

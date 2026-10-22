@@ -9,7 +9,7 @@ on:
   pull_request_target:
     types: [opened, synchronize, reopened]
   push:
-    branches: [main]
+    branches: [main, 'demo/**']
   schedule:
     - cron: "0 2 * * *"
   workflow_dispatch:
@@ -68,6 +68,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.ref_name }}   # github.head_ref is empty outside pull_request events
+
+      # Frogbot builds the dependency graph from installed deps / lockfiles. Lockfiles are gitignored in
+      # this repo, so install first (otherwise the scan can report an empty SBOM and zero findings).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies (root app + findings demo)
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          (cd demo/frogbot-findings 2>/dev/null && npm install --ignore-scripts --no-audit --no-fund || true)
 
       - uses: jfrog/frogbot@v3
         env:
