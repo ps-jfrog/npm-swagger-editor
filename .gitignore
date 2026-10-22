@@ -51,3 +51,4 @@ package-lock.json
 *-lock.json
 .npmrc
 /.npmrc
+suggestions/
