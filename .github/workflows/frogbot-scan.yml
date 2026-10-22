@@ -69,8 +69,18 @@ jobs:
         with:
           ref: ${{ github.ref_name }}   # github.head_ref is empty outside pull_request events
 
-      # No 'npm install' here on purpose: node_modules in the workspace gets scanned by SAST/secrets and made the
-      # scan fail (SAST exit status 51). demo/frogbot-findings has a committed package-lock.json instead.
+      # Frogbot v3 SCA needs the project's dependencies resolved/installed first (no installed deps => empty SBOM
+      # and zero findings). The repo's Config Profile must exclude **/node_modules/** from the JAS scanners,
+      # otherwise SAST scans node_modules and fails (exit status 51).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies (findings demo)
+        run: cd demo/frogbot-findings && npm ci --ignore-scripts --no-audit --no-fund
+        continue-on-error: true
+      - name: Install dependencies (root app)
+        run: npm install --ignore-scripts --no-audit --no-fund
+        continue-on-error: true   # never block the scan; failure only means a smaller SBOM
 
       - uses: jfrog/frogbot@v3
         env:
