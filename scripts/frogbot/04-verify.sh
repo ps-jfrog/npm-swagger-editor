@@ -3,7 +3,7 @@
 set -uo pipefail; cd "$(dirname "$0")"; source ./00-env.sh
 echo "== Xray version";                  api GET xray/api/v1/system/version; echo
 echo "== Frogbot repo ${FROGBOT_REPO}";  http_code GET "artifactory/api/repositories/${FROGBOT_REPO}"; echo
-echo "== indexed?";                      api GET xray/api/v1/binMgr/default/repos | grep -c "\"name\":\"${FROGBOT_REPO}\"" || true
+echo "== xrayIndex flag (must be True)"; api GET "artifactory/api/repositories/${FROGBOT_REPO}" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("xrayIndex"))'
 echo "== Watch";                         api GET "xray/api/v2/watches/${WATCH_NAME}" | python3 -m json.tool | head -40
 echo "== Watches Frogbot will find (same call Frogbot makes: git repo + project)"
 for k in "${GIT_RESOURCE%.git}" "${GIT_RESOURCE}"; do
